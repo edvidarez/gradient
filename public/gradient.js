@@ -1,13 +1,17 @@
-var SIZE = 600;
+var SIZE = 850;
 var b = 0;
 var m = 0;
-var learning_rate = 0.01;
+var lr = 0.0001;
+var epsilon = 0.01;
 var points = [];
 var iterations = 1000;
 var canvas;
 var min_value_x = 1000000, min_value_y = 1000000;
 var max_value_x = -1, max_value_y = -1;
 var ready = false;
+var perror;
+var aerror;
+var converge = false;
 
 function squared_min_difference(b, m, points) {
 	var total_error = 0;
@@ -19,7 +23,8 @@ function squared_min_difference(b, m, points) {
 	return total_error / (points.length).toFixed(0);
 }
 
-function step_gradient(current_b, current_m, points, learning_rate) {
+//Calculates the new Theta0 and Theta1 from the actual values
+function step_gradient(current_b, current_m, points, lr) {
 	var gradient_b = 0;
 	var gradient_m = 0;
 	var N = points.length.toFixed(0);
@@ -29,8 +34,8 @@ function step_gradient(current_b, current_m, points, learning_rate) {
 		gradient_b += -(2/N) * (y - (current_m * x + current_b));
 		gradient_m += -(2/N) * x * (y - (current_m * x + current_b));
 	}
-	var new_b = current_b - (learning_rate * gradient_b);
-	var new_m = current_m - (learning_rate * gradient_m);
+	var new_b = current_b - (lr * gradient_b);
+	var new_m = current_m - (lr * gradient_m);
 	return [new_b, new_m];
 }
 
@@ -43,19 +48,14 @@ function normalize_y(value) {
 }
 
 function get_extreme_points(b, m) {
-	/*
-		x = (y - b) / m
-	*/
-	var function_calc = function (y) {
-		return (y - b) / m;
-	}
 	var y1 = 0;
-	var x1 = function_calc(y1);
+	var x1 = (y1 - b)/m;
 	var y2 = 600;
-	var x2 = function_calc(y2);
+	var x2 = (y2 - b)/m;
 	return [normalize_x(x1), normalize_y(y1), normalize_x(x2), normalize_y(y2)];
 }
 
+//Obtains the initial positions for the dataset points and draws them
 function init_drawing(data) {
 	var all_text_lines = data.split(/\r\n|\n/);
 	var entries = [];
@@ -84,21 +84,49 @@ function init_drawing(data) {
 	return entries;
 }
 
+//Redraws the dataset points
+function draw_points(points)
+{
+	for(var i = 0; i < points.length; i++) {
+		var x_y = points[i].slice(0);
+		x_y[0] = normalize_x(x_y[0]);
+		x_y[1] = normalize_y(x_y[1]);
+		ellipse(x_y[0], x_y[1], 4, 4);
+	}
+}
+
+//Calculates values of Theta0 and Theta1 and draws the function line
 function gdb() {
-	var values = step_gradient(b, m, points, learning_rate);
+	console.log("------");
+	console.log(m);
+	console.log(b);
+
+	var values = step_gradient(b, m, points, lr);
+	
 	b = values[0];
 	m = values[1];
 	// change values of b and m from index
+	$('span.b').html(b.toFixed(2));
+	$('span.m').html(m.toFixed(2));
 	values = get_extreme_points(b, m);
 	line(values[0], values[1], values[2], values[3]);
+
+	//Convergence check
+	aerror = squared_min_difference(b,m,points);
+
+	if(Math.abs(perror - aerror) <= epsilon)
+		converge = true;
+
 }
 
-function start_gradient() {
+//Loads the dataset from file and initializes the points in canvas
+function fetch_points() {
 	$.ajax({
 		type: 'GET',
 		url: '/static/hours_score.csv',
 		datatype: "text"
 	}).done(function (data) {
+		console.log(data);
 		points = init_drawing(data);
 		ready = true;
 	});
@@ -108,12 +136,23 @@ function setup() {
 	canvas = createCanvas(SIZE, SIZE);
 	canvas.parent('data-holder');
 	background('#C0C0C0');
-	start_gradient();
+	frameRate(5);
+	fetch_points();
+	loop();
 }
 
 function draw() {
+	background('#C0C0C0');
+	draw_points(points);
+	perror = squared_min_difference(b, m, points);
+
 	if (ready && iterations > 0) {
 		gdb();
 		iterations--;
+	}
+
+	if(converge)
+	{
+		noLoop();
 	}
 }
